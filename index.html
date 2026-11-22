@@ -1,851 +1,330 @@
-import io
-import json
-import os
-import random
-import string
-import unicodedata
-import urllib.parse
-import urllib.request
-import tkinter as tk
-from datetime import datetime
-from decimal import Decimal, ROUND_HALF_UP
-from tkinter import filedialog, messagebox, ttk
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hệ Thống Thi Online - TroGiangAI</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
+    body { margin: 0; background: #0f172a; color: #f8fafc; padding-bottom: 90px; }
+    .header { background: linear-gradient(135deg, #1d4ed8, #0f172a); padding: 12px 16px; position: sticky; top: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+    .header h1 { margin: 0; font-size: 15px; color: #fde047; }
+    .sub-info { font-size: 12px; color: #bae6fd; margin-top: 3px; }
+    .timer { background: #dc2626; padding: 6px 12px; border-radius: 8px; font-weight: bold; font-size: 16px; font-family: monospace; white-space: nowrap; }
+    .container { max-width: 820px; margin: 16px auto; padding: 0 14px; }
+    .box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    label.field-lbl { display: block; font-weight: bold; font-size: 14px; color: #e2e8f0; margin-top: 10px; }
+    input[type="text"] { width: 100%; padding: 11px 12px; margin-top: 5px; margin-bottom: 6px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 15px; }
+    .slot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; margin-bottom: 10px; }
+    .slot-item { display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1.5px solid #475569; border-radius: 8px; padding: 10px 10px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .slot-item input { transform: scale(1.2); accent-color: #22c55e; }
+    .slot-item:has(input:checked) { border-color: #22c55e; background: #052e16; color: #fde047; }
+    .btn { background: #16a34a; color: #fff; border: none; padding: 13px 20px; border-radius: 10px; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 8px; }
+    .btn:disabled { background: #475569; cursor: not-allowed; }
+    .sec-title { color: #fde047; font-size: 16px; font-weight: bold; margin: 18px 0 10px; }
+    .q-title { font-weight: bold; font-size: 15.5px; margin-bottom: 10px; line-height: 1.5; }
+    .opt { display: flex; align-items: flex-start; gap: 10px; background: #0f172a; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #334155; cursor: pointer; }
+    .opt input { margin-top: 4px; transform: scale(1.2); }
+    .tf-row { background: #0f172a; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #334155; }
+    .tf-btns { display: flex; gap: 12px; margin-top: 8px; }
+    .tf-btns label { flex: 1; text-align: center; padding: 7px; border-radius: 6px; background: #1e293b; border: 1px solid #475569; font-weight: bold; cursor: pointer; }
+    .footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #1e293b; padding: 12px 16px; border-top: 1px solid #334155; display: flex; justify-content: center; }
+    .footer-bar .btn { max-width: 820px; margin-top: 0; }
+    .result-card { background: #064e3b; border: 2px solid #10b981; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 16px; }
+    .explain { margin-top: 8px; padding: 8px 10px; background: #172554; border-left: 3px solid #38bdf8; font-size: 14px; color: #bae6fd; border-radius: 4px; }
+    .correct-mark { border-color: #22c55e !important; background: #052e16 !important; }
+    .wrong-mark { border-color: #ef4444 !important; background: #450a0a !important; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1 id="examTitle">ĐANG TẢI ĐỀ THI...</h1>
+      <div class="sub-info" id="studentBanner">Vui lòng điền đầy đủ thông tin trước khi làm bài</div>
+    </div>
+    <div class="timer" id="timerBox">--:--</div>
+  </div>
 
-DB_URL = "https://trogiangai-thi-default-rtdb.asia-southeast1.firebasedatabase.app"
-WEB_URL = "https://cvabmt-dot.github.io/thi-online/"
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "online_exam_codes.json")
+  <div class="container">
+    <div id="loadingBox" class="box">⏳ Đang kết nối máy chủ đề thi...</div>
 
-SLOT_CHOICES = [
-    ("TX1", "Thường xuyên 1 (TX1 — Cột D)"),
-    ("TX2", "Thường xuyên 2 (TX2 — Cột E)"),
-    ("TX3", "Thường xuyên 3 (TX3 — Cột F)"),
-    ("TX4", "Thường xuyên 4 (TX4 — Cột G)"),
-    ("GK", "Định kỳ / Giữa kỳ (GK — Cột H)"),
-    ("CK", "Kiểm tra Học kỳ (CK — Cột I)"),
-]
+    <div id="loginBox" class="box" style="display:none;">
+      <h3 style="margin:0 0 6px; color:#38bdf8;">Thông tin thí sinh & Loại bài kiểm tra</h3>
 
+      <label class="field-lbl">1. Họ và tên học sinh (viết đầy đủ có dấu):</label>
+      <input type="text" id="inpName" placeholder="Ví dụ: Lê Nguyễn Hà Anh" />
 
-def _load_config():
-    if not os.path.exists(CONFIG_FILE):
-        return {"history": []}
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return {"history": data}
-            if isinstance(data, dict):
-                data.setdefault("history", [])
-                return data
-    except Exception:
-        pass
-    return {"history": []}
+      <label class="field-lbl">2. Lớp:</label>
+      <input type="text" id="inpClass" placeholder="Ví dụ: 10A12" />
 
+      <label class="field-lbl">3. Tích chọn đúng bài kiểm tra (để vào đúng cột điểm):</label>
+      <div class="slot-grid">
+        <label class="slot-item"><input type="radio" name="examSlot" value="TX1" data-label="ĐĐG Thường xuyên 1" /> Thường xuyên 1 (TX1)</label>
+        <label class="slot-item"><input type="radio" name="examSlot" value="TX2" data-label="ĐĐG Thường xuyên 2" /> Thường xuyên 2 (TX2)</label>
+        <label class="slot-item"><input type="radio" name="examSlot" value="TX3" data-label="ĐĐG Thường xuyên 3" /> Thường xuyên 3 (TX3)</label>
+        <label class="slot-item"><input type="radio" name="examSlot" value="TX4" data-label="ĐĐG Thường xuyên 4" /> Thường xuyên 4 (TX4)</label>
+        <label class="slot-item"><input type="radio" name="examSlot" value="GK" data-label="ĐĐG Định kỳ / Giữa kỳ" /> Định kỳ / Giữa kỳ</label>
+        <label class="slot-item"><input type="radio" name="examSlot" value="CK" data-label="ĐĐG Kiểm tra Học kỳ" /> Kiểm tra Học kỳ</label>
+      </div>
 
-def _save_config(cfg):
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+      <label class="field-lbl">4. Mã đề (tự động điền khi quét QR):</label>
+      <input type="text" id="inpCode" placeholder="Nhập mã đề thầy cung cấp" />
 
+      <button class="btn" onclick="startExam()">🚀 Xác Nhận & Bắt Đầu Làm Bài</button>
+    </div>
 
-def _http_json(url, method="GET", payload=None, timeout=15):
-    data_bytes = None
-    headers = {"Content-Type": "application/json; charset=utf-8"}
-    if payload is not None:
-        data_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(url, data=data_bytes, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read().decode("utf-8")
-        return json.loads(raw) if raw else None
+    <div id="resultBox" class="result-card" style="display:none;"></div>
+    <div id="examContent" style="display:none;"></div>
+  </div>
 
+  <div class="footer-bar" id="footerBar" style="display:none;">
+    <button class="btn" id="btnSubmit" onclick="submitExam(false)">✅ Nộp Bài & Xem Điểm Ngay</button>
+  </div>
 
-def _make_exam_code(meta):
-    subj = "".join(c for c in (meta.get("subject") or "KT").upper() if c.isalnum())[:3] or "DE"
-    grade = "".join(c for c in str(meta.get("grade") or "") if c.isdigit())[:2]
-    rand_num = "".join(random.choices(string.digits, k=3))
-    return f"{subj}{grade}-{rand_num}"
+  <script>
+    const DB_URL = "https://trogiangai-thi-default-rtdb.asia-southeast1.firebasedatabase.app";
+    const params = new URLSearchParams(window.location.search);
+    const codeFromUrl = (params.get("de") || "").trim();
+    document.getElementById("inpCode").value = codeFromUrl;
 
+    let examObj = null;
+    let timeLeft = 900;
+    let timerId = null;
+    let submitted = false;
 
-def _save_code_history(code, meta, slot_code=""):
-    cfg = _load_config()
-    items = [x for x in cfg["history"] if x.get("code") != code]
-    slot_tag = f" [{slot_code}]" if slot_code else ""
-    items.insert(0, {
-        "code": code,
-        "title": f"{meta.get('exam_type', 'Kiểm tra')}{slot_tag} - {meta.get('subject', '')} {meta.get('grade', '')}".strip(),
-        "time": datetime.now().strftime("%d/%m/%Y %H:%M"),
-    })
-    cfg["history"] = items[:30]
-    _save_config(cfg)
-
-
-def _norm_vi_name(text):
-    if not text:
-        return ""
-    s = str(text).strip().lower()
-    s = s.replace("đ", "d")
-    s = unicodedata.normalize("NFD", s)
-    s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
-    return " ".join(s.split())
-
-
-def _norm_class_code(text):
-    if not text:
-        return ""
-    return "".join(ch for ch in str(text).upper() if ch.isalnum())
-
-
-def _round_school_score(val):
-    try:
-        d = Decimal(str(float(val))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        return float(d)
-    except Exception:
-        return 0.0
-
-
-def _build_qr_png(link):
-    try:
-        import qrcode
-        qr = qrcode.QRCode(box_size=8, border=2)
-        qr.add_data(link)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        return buf.getvalue()
-    except Exception:
-        api = f"https://api.qrserver.com/v1/create-qr-code/?size=280x280&data={urllib.parse.quote(link)}"
-        with urllib.request.urlopen(api, timeout=12) as resp:
-            return resp.read()
-
-
-def _fetch_submissions(parent, code):
-    try:
-        raw = _http_json(f"{DB_URL}/results/{urllib.parse.quote(code)}.json", method="GET")
-    except Exception as e:
-        messagebox.showerror("Lỗi kết nối", f"Không thể tải bảng điểm từ máy chủ:\n{e}", parent=parent)
-        return None
-
-    if not raw or not isinstance(raw, dict):
-        messagebox.showinfo("Chưa có bài nộp", f"Chưa có học sinh nào nộp bài cho mã đề [{code}].", parent=parent)
-        return None
-
-    rows = [item for item in raw.values() if isinstance(item, dict)]
-    if not rows:
-        messagebox.showinfo("Chưa có bài nộp", f"Chưa có dữ liệu điểm hợp lệ cho mã đề [{code}].", parent=parent)
-        return None
-    return rows
-
-
-def _inspect_smas_sheet(ws):
-    """Tự động dò dòng tiêu đề, cột Họ tên, tên Lớp và ánh xạ TX1..TX4, GK, CK trong bất kỳ sheet SMAS nào."""
-    import openpyxl
-
-    header_row = None
-    name_col = None
-    stt_col = None
-
-    for r in range(1, min(16, ws.max_row + 1)):
-        for c in range(1, min(20, ws.max_column + 1)):
-            val = _norm_vi_name(ws.cell(r, c).value)
-            if val in ("ho va ten", "ho va ten hoc sinh", "ho ten", "ho ten hoc sinh"):
-                header_row = r
-                name_col = c
-                break
-        if header_row:
-            break
-
-    if not header_row or not name_col:
-        return None
-
-    for c in range(1, name_col):
-        val = _norm_vi_name(ws.cell(header_row, c).value)
-        if val in ("stt", "so tt", "tt"):
-            stt_col = c
-            break
-
-    detected_class = ""
-    for r in range(1, header_row):
-        for c in range(1, min(15, ws.max_column + 1)):
-            raw_txt = str(ws.cell(r, c).value or "").strip()
-            norm_txt = _norm_vi_name(raw_txt)
-            if "lop:" in norm_txt or norm_txt.startswith("lop "):
-                after = raw_txt.split(":", 1)[1] if ":" in raw_txt else raw_txt[3:]
-                detected_class = _norm_class_code(after)
-                break
-        if detected_class:
-            break
-
-    if not detected_class:
-        parts = ws.title.split("_")
-        for p in parts:
-            if any(ch.isdigit() for ch in p) and any(ch.isalpha() for ch in p):
-                detected_class = _norm_class_code(p)
-                break
-        if not detected_class:
-            detected_class = _norm_class_code(ws.title)
-
-    merged_span = {}
-    for rng in ws.merged_cells.ranges:
-        if rng.min_row == header_row and rng.max_row == header_row:
-            for c in range(rng.min_col, rng.max_col + 1):
-                merged_span[c] = (rng.min_col, rng.max_col)
-
-    score_cols = []
-    tx_cols = []
-    slot_to_col = {}
-    skip_headers = {"stt", "so tt", "ho va ten", "ho va ten hoc sinh", "ho ten", "ngay sinh", "gioi tinh", "tbm", "tbm hki", "tbm hkii", "tbm cn", "nhan xet"}
-
-    for c in range(name_col + 1, min(25, ws.max_column + 1)):
-        col_let = openpyxl.utils.get_column_letter(c)
-        if c in merged_span:
-            min_c, _ = merged_span[c]
-            base_title = str(ws.cell(header_row, min_c).value or "").strip()
-            norm_base = _norm_vi_name(base_title)
-            if not base_title or any(k in norm_base for k in ("tbm", "nhan xet", "ngay sinh")):
-                continue
-            sub_idx = c - min_c + 1
-            label = f"Cột {col_let} — {base_title} (TX{sub_idx})"
-            score_cols.append((col_let, label))
-            if "tx" in norm_base or "thuong xuyen" in norm_base:
-                tx_cols.append(col_let)
-                slot_to_col[f"TX{sub_idx}"] = col_let
-        else:
-            raw_h = str(ws.cell(header_row, c).value or "").strip()
-            norm_h = _norm_vi_name(raw_h)
-            if not raw_h or norm_h in skip_headers or "nhan xet" in norm_h or norm_h.startswith("tbm"):
-                continue
-            label = f"Cột {col_let} — {raw_h}"
-            score_cols.append((col_let, label))
-            if "tx" in norm_h or "thuong xuyen" in norm_h:
-                tx_cols.append(col_let)
-                for idx_n in ("1", "2", "3", "4"):
-                    if idx_n in norm_h:
-                        slot_to_col[f"TX{idx_n}"] = col_let
-            elif "gk" in norm_h or "giua ky" in norm_h or "dinh ky" in norm_h:
-                slot_to_col["GK"] = col_let
-            elif "ck" in norm_h or "cuoi ky" in norm_h or "hoc ky" in norm_h:
-                slot_to_col["CK"] = col_let
-
-    return {
-        "header_row": header_row,
-        "name_col": name_col,
-        "stt_col": stt_col,
-        "class_code": detected_class,
-        "score_cols": score_cols,
-        "tx_cols": tx_cols,
-        "slot_to_col": slot_to_col,
+    function preselectSlot(slotVal) {
+      if (!slotVal) return;
+      const radio = document.querySelector(`input[name="examSlot"][value="${slotVal}"]`);
+      if (radio) radio.checked = true;
     }
 
-
-def _export_standalone_excel(parent, code, rows):
-    rows = sorted(rows, key=lambda r: (
-        str(r.get("lop", "")).upper(),
-        (str(r.get("ho_ten", "")).strip().split()[-1].lower() if str(r.get("ho_ten", "")).strip() else ""),
-        str(r.get("ho_ten", "")).lower()
-    ))
-
-    save_path = filedialog.asksaveasfilename(
-        defaultextension=".xlsx",
-        filetypes=[("Excel Workbook", "*.xlsx"), ("CSV File", "*.csv")],
-        initialfile=f"BangDiem_Online_{code}.xlsx",
-        parent=parent,
-    )
-    if not save_path:
-        return
-
-    headers = ["STT", "Họ và tên học sinh", "Lớp", "Loại bài kiểm tra", "Điểm số (10)", "Phần I (TN)", "Phần II (Đúng/Sai)", "Thời gian nộp"]
-    try:
-        if save_path.lower().endswith(".csv"):
-            raise ImportError("CSV requested")
-        import openpyxl
-        from openpyxl.styles import Alignment, Font, PatternFill
-
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = f"Diem_{code}"
-        ws.append(headers)
-
-        header_fill = PatternFill(start_color="1D4ED8", end_color="1D4ED8", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF", size=11)
-        for col_idx in range(1, len(headers) + 1):
-            cell = ws.cell(row=1, column=col_idx)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-
-        for idx, r in enumerate(rows, start=1):
-            loai = r.get("ten_loai_diem") or r.get("loai_diem") or ""
-            ws.append([
-                idx,
-                r.get("ho_ten", ""),
-                r.get("lop", ""),
-                loai,
-                _round_school_score(r.get("diem", 0)),
-                r.get("phan_1_dung", ""),
-                r.get("phan_2_diem", 0),
-                r.get("thoi_gian_nop", ""),
-            ])
-
-        for i, w in enumerate([7, 28, 12, 22, 15, 16, 18, 22], start=1):
-            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-
-        wb.save(save_path)
-    except Exception:
-        if not save_path.lower().endswith(".csv"):
-            save_path = os.path.splitext(save_path)[0] + ".csv"
-        import csv
-        with open(save_path, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.writer(f)
-            writer.writerow(headers)
-            for idx, r in enumerate(rows, start=1):
-                loai = r.get("ten_loai_diem") or r.get("loai_diem") or ""
-                writer.writerow([
-                    idx,
-                    r.get("ho_ten", ""),
-                    r.get("lop", ""),
-                    loai,
-                    _round_school_score(r.get("diem", 0)),
-                    r.get("phan_1_dung", ""),
-                    r.get("phan_2_diem", 0),
-                    r.get("thoi_gian_nop", ""),
-                ])
-
-    messagebox.showinfo("Xuất điểm thành công", f"Đã lưu bảng điểm của {len(rows)} học sinh:\n{save_path}", parent=parent)
-    try:
-        os.startfile(save_path)
-    except Exception:
-        pass
-
-
-def _fill_smas_workbook(parent, code, rows, smas_path, target_sheet, target_col_mode):
-    try:
-        import openpyxl
-        from openpyxl.styles import Font
-    except ImportError:
-        messagebox.showerror("Thiếu thư viện", "Máy chưa cài thư viện openpyxl để ghi file Excel SMAS.", parent=parent)
-        return
-
-    if not smas_path or not os.path.exists(smas_path):
-        messagebox.showwarning("Chưa chọn file SMAS", "Vui lòng bấm 'Chọn File SMAS' để chọn tệp Excel của lớp cần nhập điểm!", parent=parent)
-        return
-
-    try:
-        wb = openpyxl.load_workbook(smas_path)
-    except Exception as e:
-        messagebox.showerror("Lỗi mở file SMAS", f"Không mở được tệp Excel SMAS:\n{e}", parent=parent)
-        return
-
-    valid_sheets = []
-    for sname in wb.sheetnames:
-        if sname in ("Bia", "HDSD"):
-            continue
-        info = _inspect_smas_sheet(wb[sname])
-        if info:
-            valid_sheets.append((sname, info))
-
-    if not valid_sheets:
-        messagebox.showwarning("Không nhận diện được bảng điểm", "Tệp Excel này không có cột 'Họ và tên' theo mẫu SMAS 4.0!", parent=parent)
-        return
-
-    if target_sheet != "ALL":
-        valid_sheets = [(s, inf) for s, inf in valid_sheets if s == target_sheet]
-
-    latest_by_class_name = {}
-    latest_by_name_only = {}
-    for r in rows:
-        n_name = _norm_vi_name(r.get("ho_ten", ""))
-        if not n_name:
-            continue
-        n_cls = _norm_class_code(r.get("lop", ""))
-        latest_by_class_name[(n_cls, n_name)] = r
-        latest_by_name_only[n_name] = r
-
-    matched_keys = set()
-    total_filled = 0
-    per_sheet_summary = []
-    missing_students = []
-    stop_keywords = ("so hoc sinh", "tong cong", "ghi chu", "ky ten", "giao vien")
-
-    for sname, info in valid_sheets:
-        ws = wb[sname]
-        h_row = info["header_row"]
-        name_col = info["name_col"]
-        stt_col = info["stt_col"]
-        sheet_cls = info["class_code"]
-        tx_cols = info["tx_cols"]
-        slot_to_col = info["slot_to_col"]
-
-        sheet_filled = 0
-        sheet_total = 0
-
-        for r_idx in range(h_row + 1, ws.max_row + 1):
-            raw_name = ws.cell(r_idx, name_col).value
-            if not raw_name or not isinstance(raw_name, str):
-                continue
-            n_st = _norm_vi_name(raw_name)
-            if not n_st or any(k in n_st for k in stop_keywords):
-                continue
-            if stt_col is not None:
-                stt_val = ws.cell(r_idx, stt_col).value
-                if not isinstance(stt_val, int):
-                    continue
-
-            sheet_total += 1
-            if target_sheet != "ALL" or len(valid_sheets) == 1:
-                sub = latest_by_class_name.get((sheet_cls, n_st)) or latest_by_name_only.get(n_st)
-            else:
-                sub = latest_by_class_name.get((sheet_cls, n_st))
-
-            if sub:
-                chosen_col_letter = None
-                if target_col_mode == "BY_STUDENT_TICK":
-                    st_slot = str(sub.get("loai_diem") or "").strip().upper()
-                    chosen_col_letter = slot_to_col.get(st_slot)
-                    if not chosen_col_letter:
-                        for c_let in tx_cols:
-                            c_i = openpyxl.utils.column_index_from_string(c_let)
-                            cur_v = ws.cell(r_idx, c_i).value
-                            if cur_v is None or str(cur_v).strip() == "":
-                                chosen_col_letter = c_let
-                                break
-                elif target_col_mode == "AUTO_TX":
-                    for c_let in tx_cols:
-                        c_i = openpyxl.utils.column_index_from_string(c_let)
-                        cur_v = ws.cell(r_idx, c_i).value
-                        if cur_v is None or str(cur_v).strip() == "":
-                            chosen_col_letter = c_let
-                            break
-                    if not chosen_col_letter and tx_cols:
-                        chosen_col_letter = tx_cols[-1]
-                else:
-                    chosen_col_letter = target_col_mode
-
-                if chosen_col_letter:
-                    c_i = openpyxl.utils.column_index_from_string(chosen_col_letter)
-                    cell = ws.cell(r_idx, c_i)
-                    cell.value = _round_school_score(sub.get("diem", 0))
-                    cell.number_format = "[=10]0;0.0;0.0"
-                    if not cell.font or cell.font.name != "Times New Roman":
-                        cell.font = Font(name="Times New Roman", size=10)
-                    matched_keys.add((_norm_class_code(sub.get("lop", "")), n_st))
-                    matched_keys.add(("", n_st))
-                    sheet_filled += 1
-                    total_filled += 1
-            else:
-                if target_sheet != "ALL" or len(valid_sheets) == 1:
-                    missing_students.append(f"- {raw_name}")
-
-        if sheet_filled > 0 or target_sheet != "ALL" or len(valid_sheets) == 1:
-            per_sheet_summary.append(f"• {sname} (Lớp {sheet_cls}): đã điền {sheet_filled}/{sheet_total} học sinh")
-
-    unmatched_subs = []
-    for (c_key, n_key), sub in latest_by_class_name.items():
-        if (c_key, n_key) not in matched_keys and ("", n_key) not in matched_keys:
-            loai = sub.get("loai_diem", "")
-            unmatched_subs.append(f"- {sub.get('ho_ten', '')} (Lớp: {sub.get('lop', '')}, Bài: {loai}, Điểm: {sub.get('diem', 0)})")
-
-    base_dir = os.path.dirname(smas_path)
-    base_name = os.path.splitext(os.path.basename(smas_path))[0]
-    default_out = os.path.join(base_dir, f"{base_name}_DaNhapDiem_{code}.xlsx")
-
-    out_path = filedialog.asksaveasfilename(
-        defaultextension=".xlsx",
-        filetypes=[("Excel Workbook", "*.xlsx")],
-        initialdir=base_dir,
-        initialfile=os.path.basename(default_out),
-        parent=parent,
-    )
-    if not out_path:
-        return
-
-    try:
-        wb.save(out_path)
-    except Exception as e:
-        messagebox.showerror("Lỗi lưu file", f"Không lưu được tệp Excel (hãy đóng file nếu đang mở):\n{e}", parent=parent)
-        return
-
-    report_lines = [
-        f"✅ Đã đổ thành công {total_filled} điểm vào đúng cột trên sổ SMAS 4.0!",
-        *per_sheet_summary,
-        f"\n📁 Tệp mới lưu tại:\n{out_path}",
-    ]
-    if unmatched_subs:
-        report_lines.append("\n⚠️ Bài nộp chưa khớp được tên/lớp (kiểm tra lại tên/lớp HS nhập):")
-        report_lines.extend(unmatched_subs[:10])
-    if (target_sheet != "ALL" or len(valid_sheets) == 1) and missing_students:
-        report_lines.append(f"\n📌 Học sinh chưa nộp bài ({len(missing_students)} em):")
-        report_lines.extend(missing_students[:12])
-        if len(missing_students) > 12:
-            report_lines.append(f"... và {len(missing_students) - 12} em khác.")
-
-    messagebox.showinfo("Hoàn Tất Nhập Điểm SMAS 4.0", "\n".join(report_lines), parent=parent)
-    try:
-        os.startfile(out_path)
-    except Exception:
-        pass
-
-
-def _open_score_collector_dialog(parent, preset_code=""):
-    dlg = tk.Toplevel(parent)
-    dlg.title("Thu Bảng Điểm Thi Online & Đổ Vào SMAS 4.0")
-    dlg.geometry("590x475")
-    dlg.configure(bg="#121820")
-    dlg.transient(parent)
-
-    cfg = _load_config()
-    history = cfg["history"]
-    display_map = {f"{h['code']}  |  {h['title']} ({h['time']})": h["code"] for h in history}
-    options = list(display_map.keys())
-
-    tk.Label(dlg, text="📥 THU ĐIỂM TỪ ĐIỆN THOẠI & ĐỔ VÀO SMAS 4.0", font=("Arial", 12, "bold"), bg="#121820", fg="#38BDF8").pack(pady=(14, 10))
-
-    f1 = tk.Frame(dlg, bg="#121820")
-    f1.pack(fill=tk.X, padx=22, pady=4)
-    tk.Label(f1, text="1. Chọn hoặc nhập Mã đề thi:", font=("Arial", 10, "bold"), bg="#121820", fg="#E2E8F0").pack(anchor="w")
-
-    default_code_str = preset_code if preset_code else (options[0] if options else "")
-    combo_code_var = tk.StringVar(value=default_code_str)
-    combo_code = ttk.Combobox(f1, textvariable=combo_code_var, values=options, width=72)
-    combo_code.pack(fill=tk.X, pady=(4, 2))
-
-    f2 = tk.Frame(dlg, bg="#1E293B", padx=12, pady=10)
-    f2.pack(fill=tk.X, padx=22, pady=10)
-    tk.Label(f2, text="2. Chọn tệp Excel Sổ điểm SMAS 4.0 của lớp/môn cần nhập:", font=("Arial", 10, "bold"), bg="#1E293B", fg="#FDE047").pack(anchor="w")
-
-    smas_path_var = tk.StringVar(value="")
-    row_file = tk.Frame(f2, bg="#1E293B")
-    row_file.pack(fill=tk.X, pady=(6, 6))
-    ent_smas = tk.Entry(row_file, textvariable=smas_path_var, font=("Arial", 9))
-    ent_smas.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-
-    sheet_var = tk.StringVar(value="")
-    combo_sheet = ttk.Combobox(f2, textvariable=sheet_var, state="readonly", width=34)
-
-    default_mode_label = "Tự động vào đúng cột học sinh đã tích (TX1/TX2/TX3/TX4/GK/CK)"
-    col_mode_map = {
-        default_mode_label: "BY_STUDENT_TICK",
-        "Tự động điền vào ô ĐĐG TX còn trống đầu tiên": "AUTO_TX",
-    }
-    col_var = tk.StringVar(value=default_mode_label)
-    combo_col = ttk.Combobox(f2, textvariable=col_var, values=list(col_mode_map.keys()), state="readonly", width=44)
-
-    def _inspect_and_load_file(path):
-        if not path or not os.path.exists(path):
-            return
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(path, read_only=False, data_only=True)
-            found_sheets = []
-            merged_cols = []
-            seen_col_lets = set()
-
-            for sname in wb.sheetnames:
-                if sname in ("Bia", "HDSD"):
-                    continue
-                info = _inspect_smas_sheet(wb[sname])
-                if info:
-                    found_sheets.append(sname)
-                    for c_let, c_lbl in info["score_cols"]:
-                        if c_let not in seen_col_lets:
-                            seen_col_lets.add(c_let)
-                            merged_cols.append((c_let, c_lbl))
-            wb.close()
-
-            if not found_sheets:
-                messagebox.showwarning("Tệp chưa đúng mẫu", "Không tìm thấy bảng danh sách học sinh trong tệp này!", parent=dlg)
-                return
-
-            if len(found_sheets) > 1:
-                s_vals = ["ALL - Tự động khớp tất cả các lớp trong tệp"] + found_sheets
-            else:
-                s_vals = found_sheets
-            combo_sheet["values"] = s_vals
-            sheet_var.set(s_vals[0])
-
-            col_mode_map.clear()
-            col_mode_map[default_mode_label] = "BY_STUDENT_TICK"
-            col_mode_map["Tự động điền vào ô ĐĐG TX còn trống đầu tiên"] = "AUTO_TX"
-            for c_let, c_lbl in merged_cols:
-                col_mode_map[f"Ép tất cả vào {c_lbl}"] = c_let
-            c_vals = list(col_mode_map.keys())
-            combo_col["values"] = c_vals
-            col_var.set(c_vals[0])
-        except Exception as e:
-            messagebox.showerror("Lỗi đọc tệp Excel", f"Không đọc được cấu trúc tệp:\n{e}", parent=dlg)
-
-    def _browse_smas():
-        p = filedialog.askopenfilename(
-            title="Chọn tệp Sổ Ghi Điểm SMAS 4.0 (.xlsx)",
-            filetypes=[("Excel Workbook", "*.xlsx")],
-            parent=dlg,
-        )
-        if p:
-            smas_path_var.set(p)
-            _inspect_and_load_file(p)
-
-    tk.Button(row_file, text="📂 Chọn File SMAS", font=("Arial", 9, "bold"), bg="#0284C7", fg="white", padx=10, pady=3, command=_browse_smas).pack(side=tk.RIGHT)
-
-    row_s = tk.Frame(f2, bg="#1E293B")
-    row_s.pack(fill=tk.X, pady=3)
-    tk.Label(row_s, text="Lớp / Sheet:", font=("Arial", 9, "bold"), bg="#1E293B", fg="#E2E8F0", width=11, anchor="w").pack(side=tk.LEFT)
-    combo_sheet.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-    row_c = tk.Frame(f2, bg="#1E293B")
-    row_c.pack(fill=tk.X, pady=3)
-    tk.Label(row_c, text="Cột điểm:", font=("Arial", 9, "bold"), bg="#1E293B", fg="#E2E8F0", width=11, anchor="w").pack(side=tk.LEFT)
-    combo_col.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-    def _get_selected_code():
-        raw_val = combo_code_var.get().strip()
-        if not raw_val:
-            messagebox.showwarning("Thiếu mã đề", "Vui lòng chọn hoặc nhập mã đề cần thu điểm!", parent=dlg)
-            return None
-        return display_map.get(raw_val, raw_val.split("|")[0].strip())
-
-    def _run_fill_smas():
-        code = _get_selected_code()
-        if not code:
-            return
-        rows = _fetch_submissions(dlg, code)
-        if not rows:
-            return
-        s_raw = sheet_var.get()
-        target_sheet = "ALL" if (not s_raw or s_raw.startswith("ALL")) else s_raw
-        col_mode = col_mode_map.get(col_var.get(), "BY_STUDENT_TICK")
-        _fill_smas_workbook(dlg, code, rows, smas_path_var.get().strip(), target_sheet, col_mode)
-
-    def _run_standalone():
-        code = _get_selected_code()
-        if not code:
-            return
-        rows = _fetch_submissions(dlg, code)
-        if not rows:
-            return
-        _export_standalone_excel(dlg, code, rows)
-
-    tk.Button(
-        dlg,
-        text="🚀 Tải Điểm & Đổ Thẳng Vào File SMAS 4.0",
-        font=("Arial", 11, "bold"),
-        bg="#16A34A",
-        fg="white",
-        padx=16,
-        pady=9,
-        command=_run_fill_smas,
-    ).pack(fill=tk.X, padx=22, pady=(8, 6))
-
-    tk.Button(
-        dlg,
-        text="📄 Hoặc Xuất Ra Bảng Điểm Excel Độc Lập Mới",
-        font=("Arial", 9, "bold"),
-        bg="#334155",
-        fg="#E2E8F0",
-        padx=12,
-        pady=6,
-        command=_run_standalone,
-    ).pack(fill=tk.X, padx=22, pady=(2, 12))
-
-
-def _show_qr_projector_window(parent, code, meta, slot_label=""):
-    exam_link = f"{WEB_URL}?de={urllib.parse.quote(code)}"
-    pop = tk.Toplevel(parent)
-    pop.title(f"Chiếu Mã QR Thi Online - Mã đề {code}")
-    pop.geometry("550x630")
-    pop.configure(bg="#0F172A")
-    pop.transient(parent)
-
-    tk.Label(
-        pop,
-        text="📱 HỌC SINH QUÉT MÃ QR ĐỂ VÀO THI",
-        font=("Arial", 14, "bold"),
-        bg="#0F172A",
-        fg="#FDE047",
-    ).pack(pady=(14, 4))
-
-    title_txt = f"{meta.get('exam_type', 'KIỂM TRA')} - {meta.get('subject', '')} {meta.get('grade', '')} ({meta.get('duration', 15)} phút)"
-    tk.Label(pop, text=title_txt, font=("Arial", 11), bg="#0F172A", fg="#E2E8F0").pack(pady=(0, 2))
-    if slot_label:
-        tk.Label(pop, text=f"Cột điểm mặc định: {slot_label}", font=("Arial", 10, "bold"), bg="#0F172A", fg="#4ADE80").pack(pady=(0, 6))
-
-    qr_frame = tk.Frame(pop, bg="white", padx=12, pady=12)
-    qr_frame.pack(pady=6)
-    qr_lbl = tk.Label(qr_frame, text="⏳ Đang tạo mã QR...", bg="white", fg="black", font=("Arial", 11))
-    qr_lbl.pack()
-
-    try:
-        png_bytes = _build_qr_png(exam_link)
-        photo = tk.PhotoImage(data=png_bytes)
-        qr_lbl.config(image=photo, text="")
-        qr_lbl.image = photo
-    except Exception as e:
-        qr_lbl.config(text=f"Không tải được ảnh QR:\n{e}\nHọc sinh nhập mã đề bên dưới.")
-
-    tk.Label(
-        pop,
-        text=f"MÃ ĐỀ: {code}",
-        font=("Consolas", 20, "bold"),
-        bg="#1E293B",
-        fg="#38BDF8",
-        padx=18,
-        pady=6,
-    ).pack(pady=(12, 6))
-
-    link_entry = tk.Entry(pop, font=("Consolas", 10), justify="center", width=56)
-    link_entry.insert(0, exam_link)
-    link_entry.config(state="readonly")
-    link_entry.pack(pady=4)
-
-    lbl_count = tk.Label(
-        pop,
-        text="📊 Sĩ số đã nộp bài: 0 học sinh",
-        font=("Arial", 12, "bold"),
-        bg="#0F172A",
-        fg="#4ADE80",
-    )
-    lbl_count.pack(pady=10)
-
-    def _refresh_count():
-        try:
-            res = _http_json(f"{DB_URL}/results/{urllib.parse.quote(code)}.json?shallow=true", method="GET", timeout=8)
-            cnt = len(res) if isinstance(res, dict) else 0
-            lbl_count.config(text=f"📊 Sĩ số đã nộp bài: {cnt} học sinh")
-        except Exception:
-            lbl_count.config(text="⚠️ Không kiểm tra được sĩ số (kiểm tra mạng)")
-
-    def _copy_link():
-        pop.clipboard_clear()
-        pop.clipboard_append(exam_link)
-        messagebox.showinfo("Đã sao chép", f"Đã copy link thi:\n{exam_link}", parent=pop)
-
-    btn_row = tk.Frame(pop, bg="#0F172A")
-    btn_row.pack(pady=8)
-    tk.Button(btn_row, text="📋 Copy Link Thi", font=("Arial", 10, "bold"), bg="#0284C7", fg="white", padx=12, pady=6, command=_copy_link).pack(side=tk.LEFT, padx=5)
-    tk.Button(btn_row, text="🔄 Cập Nhật Sĩ Số Nộp", font=("Arial", 10, "bold"), bg="#D97706", fg="white", padx=12, pady=6, command=_refresh_count).pack(side=tk.LEFT, padx=5)
-    tk.Button(btn_row, text="📥 Thu Điểm Vào SMAS", font=("Arial", 10, "bold"), bg="#16A34A", fg="white", padx=12, pady=6, command=lambda: _open_score_collector_dialog(pop, code)).pack(side=tk.LEFT, padx=5)
-
-
-def _ask_target_slot_and_push(win, exam_data, meta):
-    ask = tk.Toplevel(win)
-    ask.title("Chọn Cột Điểm Cho Đề Thi Online")
-    ask.geometry("420x330")
-    ask.configure(bg="#121820")
-    ask.transient(win)
-    ask.grab_set()
-
-    tk.Label(ask, text="📌 ĐỀ NÀY LẤY ĐIỂM VÀO CỘT NÀO?", font=("Arial", 11, "bold"), bg="#121820", fg="#FDE047").pack(pady=(14, 4))
-    tk.Label(ask, text="(Khi học sinh quét QR mở đề, ô tương ứng sẽ tích sẵn)", font=("Arial", 9), bg="#121820", fg="#94A3B8").pack(pady=(0, 8))
-
-    et = _norm_vi_name(meta.get("exam_type", ""))
-    default_slot = "TX1"
-    if "giua" in et:
-        default_slot = "GK"
-    elif "cuoi" in et or "hoc ky" in et:
-        default_slot = "CK"
-
-    slot_var = tk.StringVar(value=default_slot)
-    frame_opts = tk.Frame(ask, bg="#1E293B", padx=14, pady=8)
-    frame_opts.pack(fill=tk.X, padx=24, pady=4)
-
-    for s_code, s_text in SLOT_CHOICES:
-        tk.Radiobutton(
-            frame_opts,
-            text=s_text,
-            variable=slot_var,
-            value=s_code,
-            font=("Arial", 10, "bold"),
-            bg="#1E293B",
-            fg="#F8FAFC",
-            selectcolor="#0F172A",
-            activebackground="#1E293B",
-            activeforeground="#FDE047",
-            anchor="w",
-        ).pack(fill=tk.X, pady=2)
-
-    def _confirm_push():
-        chosen_code = slot_var.get()
-        chosen_lbl = dict(SLOT_CHOICES).get(chosen_code, chosen_code)
-        ask.destroy()
-
-        code = _make_exam_code(meta)
-        payload = {
-            "code": code,
-            "target_slot": chosen_code,
-            "meta": meta,
-            "exam_data": exam_data,
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    window.onload = async () => {
+      document.getElementById("loadingBox").style.display = "none";
+      document.getElementById("loginBox").style.display = "block";
+      if (codeFromUrl) {
+        await fetchExam(codeFromUrl);
+      } else {
+        document.getElementById("examTitle").innerText = "THI ONLINE - TROGIANGAI";
+      }
+    };
+
+    async function fetchExam(code) {
+      try {
+        const res = await fetch(`${DB_URL}/exams/${encodeURIComponent(code)}.json`);
+        const data = await res.json();
+        if (!data || !data.exam_data) {
+          alert("Không tìm thấy mã đề: " + code + ". Em hãy kiểm tra lại mã đề!");
+          return false;
         }
-        try:
-            _http_json(f"{DB_URL}/exams/{urllib.parse.quote(code)}.json", method="PUT", payload=payload)
-            _save_code_history(code, meta, chosen_code)
-            _show_qr_projector_window(win, code, meta, chosen_lbl)
-        except Exception as e:
-            messagebox.showerror("Lỗi phát đề online", f"Không đẩy được đề lên Firebase:\n{e}", parent=win)
+        examObj = data;
+        const m = data.meta || {};
+        document.getElementById("examTitle").innerText = `${(m.exam_type || "KIỂM TRA").toUpperCase()} - ${(m.subject || "").toUpperCase()} ${m.grade || ""}`;
+        timeLeft = (parseInt(m.duration || 15, 10)) * 60;
+        updateTimerText();
 
-    tk.Button(
-        ask,
-        text="🚀 Tạo Mã QR & Phát Đề Ngay",
-        font=("Arial", 11, "bold"),
-        bg="#0284C7",
-        fg="white",
-        padx=16,
-        pady=8,
-        command=_confirm_push,
-    ).pack(pady=14)
+        if (data.target_slot) {
+          preselectSlot(data.target_slot);
+        } else {
+          const et = (m.exam_type || "").toLowerCase();
+          if (et.includes("giữa")) preselectSlot("GK");
+          else if (et.includes("cuối") || et.includes("học kỳ")) preselectSlot("CK");
+        }
+        return true;
+      } catch (e) {
+        alert("Lỗi kết nối mạng: " + e.message);
+        return false;
+      }
+    }
 
+    async function startExam() {
+      const name = document.getElementById("inpName").value.trim();
+      const cls = document.getElementById("inpClass").value.trim().toUpperCase();
+      const code = document.getElementById("inpCode").value.trim();
+      const slotRadio = document.querySelector('input[name="examSlot"]:checked');
 
-def attach_firebase_tools(win, ns):
-    state = ns.get("state")
-    if not isinstance(state, dict):
-        return
+      if (!name || !cls || !code) {
+        alert("Em vui lòng nhập đầy đủ Họ tên, Lớp và Mã đề!");
+        return;
+      }
+      if (!slotRadio) {
+        alert("Em vui lòng tích chọn đúng loại bài kiểm tra (TX1, TX2, TX3, TX4, Định kỳ/Giữa kỳ hoặc Học kỳ)!");
+        return;
+      }
+      if (!examObj || examObj.code !== code) {
+        const ok = await fetchExam(code);
+        if (!ok) return;
+      }
 
-    cloud_bar = tk.Frame(win, bg="#16202C", pady=7)
-    cloud_bar.pack(fill=tk.X, padx=16, pady=(0, 8))
+      const slotLabel = slotRadio.getAttribute("data-label") || slotRadio.value;
+      document.getElementById("studentBanner").innerText = `HS: ${name} | Lớp: ${cls} | Bài: ${slotLabel}`;
+      document.getElementById("loginBox").style.display = "none";
+      document.getElementById("examContent").style.display = "block";
+      document.getElementById("footerBar").style.display = "flex";
+      renderQuestions();
 
-    tk.Label(cloud_bar, text="🌐 Thi Online (40-50 HS):", font=("Arial", 10, "bold"), bg="#16202C", fg="#38BDF8").pack(side=tk.LEFT, padx=(10, 8))
+      timerId = setInterval(() => {
+        if (timeLeft > 0) {
+          timeLeft--;
+          updateTimerText();
+        } else {
+          clearInterval(timerId);
+          submitExam(true);
+        }
+      }, 1000);
+    }
 
-    def _push_exam_online():
-        exam_data = state.get("exam_data")
-        meta = state.get("meta") or {}
-        if not exam_data:
-            messagebox.showwarning("Chưa có đề", "Vui lòng tạo đề mới hoặc nạp đề từ Kho Đề Offline trước!", parent=win)
-            return
-        _ask_target_slot_and_push(win, exam_data, meta)
+    function updateTimerText() {
+      const m = String(Math.floor(timeLeft / 60)).padStart(2, "0");
+      const s = String(timeLeft % 60).padStart(2, "0");
+      document.getElementById("timerBox").innerText = `⏱️ ${m}:${s}`;
+    }
 
-    btn_push_qr = tk.Button(
-        cloud_bar,
-        text="☁️ Phát Đề Online + Mã QR",
-        font=("Arial", 10, "bold"),
-        bg="#0284C7",
-        fg="white",
-        padx=12,
-        pady=5,
-        state="disabled",
-        command=_push_exam_online,
-    )
-    btn_push_qr.pack(side=tk.LEFT, padx=4)
+    function renderQuestions() {
+      const ed = examObj.exam_data;
+      const p1 = ed.phan_1_trac_nghiem || [];
+      const p2 = ed.phan_2_dung_sai || [];
+      let html = "";
 
-    btn_collect_excel = tk.Button(
-        cloud_bar,
-        text="📥 Thu Bảng Điểm Excel / SMAS",
-        font=("Arial", 10, "bold"),
-        bg="#15803D",
-        fg="white",
-        padx=12,
-        pady=5,
-        command=lambda: _open_score_collector_dialog(win),
-    )
-    btn_collect_excel.pack(side=tk.LEFT, padx=6)
+      if (p1.length) {
+        html += `<div class="sec-title">PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (${p1.length} câu)</div>`;
+        p1.forEach((q, idx) => {
+          html += `<div class="box" id="p1_card_${idx}">
+            <div class="q-title">Câu ${idx + 1}: ${q.cau_hoi || ""}</div>`;
+          ["A", "B", "C", "D"].forEach(k => {
+            html += `<label class="opt" id="p1_opt_${idx}_${k}">
+              <input type="radio" name="p1_${idx}" value="${k}" />
+              <span><b>${k}.</b> ${(q.lua_chon || {})[k] || ""}</span>
+            </label>`;
+          });
+          html += `<div class="explain" id="p1_exp_${idx}" style="display:none;"></div></div>`;
+        });
+      }
 
-    def _watch_exam_ready():
-        try:
-            if not win.winfo_exists():
-                return
-            has_exam = bool(state.get("exam_data"))
-            btn_push_qr.config(state="normal" if has_exam else "disabled")
-            win.after(600, _watch_exam_ready)
-        except Exception:
-            pass
+      if (p2.length) {
+        html += `<div class="sec-title">PHẦN II. TRẮC NGHIỆM ĐÚNG / SAI (${p2.length} câu - Mỗi câu 4 ý)</div>`;
+        p2.forEach((q, idx) => {
+          html += `<div class="box" id="p2_card_${idx}">
+            <div class="q-title">Câu ${idx + 1}: ${q.dan_nhap || ""}</div>`;
+          (q.cac_y || []).forEach((y, yIdx) => {
+            html += `<div class="tf-row" id="p2_row_${idx}_${yIdx}">
+              <div><b>${y.ky_hieu})</b> ${y.noi_dung || ""}</div>
+              <div class="tf-btns">
+                <label><input type="radio" name="p2_${idx}_${yIdx}" value="D" /> Đúng</label>
+                <label><input type="radio" name="p2_${idx}_${yIdx}" value="S" /> Sai</label>
+              </div>
+            </div>`;
+          });
+          html += `<div class="explain" id="p2_exp_${idx}" style="display:none;"></div></div>`;
+        });
+      }
 
-    _watch_exam_ready()
+      document.getElementById("examContent").innerHTML = html;
+      if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise();
+    }
+
+    async function submitExam(isAuto) {
+      if (submitted) return;
+      if (!isAuto && !confirm("Em chắc chắn muốn nộp bài ngay bây giờ?")) return;
+      submitted = true;
+      clearInterval(timerId);
+      const btn = document.getElementById("btnSubmit");
+      btn.disabled = true;
+      btn.innerText = "⏳ Đang chấm và gửi điểm...";
+
+      const ed = examObj.exam_data;
+      const p1 = ed.phan_1_trac_nghiem || [];
+      const p2 = ed.phan_2_dung_sai || [];
+      let c1 = 0;
+
+      p1.forEach((q, idx) => {
+        const chosen = document.querySelector(`input[name="p1_${idx}"]:checked`);
+        const val = chosen ? chosen.value : "";
+        const ans = q.dap_an || "";
+        if (val === ans) c1++;
+        const ansEl = document.getElementById(`p1_opt_${idx}_${ans}`);
+        if (ansEl) ansEl.classList.add("correct-mark");
+        if (val && val !== ans) {
+          const wEl = document.getElementById(`p1_opt_${idx}_${val}`);
+          if (wEl) wEl.classList.add("wrong-mark");
+        }
+        const expEl = document.getElementById(`p1_exp_${idx}`);
+        expEl.style.display = "block";
+        expEl.innerHTML = `<b>Đáp án đúng: ${ans}</b>${q.giai_thich ? " — " + q.giai_thich : ""}`;
+      });
+
+      const tfPts = [0.0, 0.1, 0.25, 0.5, 1.0];
+      let c2Raw = 0;
+      p2.forEach((q, idx) => {
+        let rightCnt = 0;
+        let expLines = [];
+        (q.cac_y || []).forEach((y, yIdx) => {
+          const chosen = document.querySelector(`input[name="p2_${idx}_${yIdx}"]:checked`);
+          const val = chosen ? chosen.value : "";
+          const isTrue = !!y.dap_an_dung;
+          const ok = (val === "D" && isTrue) || (val === "S" && !isTrue);
+          const rowEl = document.getElementById(`p2_row_${idx}_${yIdx}`);
+          if (ok) {
+            rightCnt++;
+            rowEl.classList.add("correct-mark");
+          } else {
+            rowEl.classList.add("wrong-mark");
+          }
+          expLines.push(`${y.ky_hieu}) <b>${isTrue ? "Đúng" : "Sai"}</b>${y.giai_thich ? " (" + y.giai_thich + ")" : ""}`);
+        });
+        c2Raw += tfPts[rightCnt];
+        const expEl = document.getElementById(`p2_exp_${idx}`);
+        expEl.style.display = "block";
+        expEl.innerHTML = expLines.join("<br/>");
+      });
+
+      const p1Max = p2.length ? 6.0 : 10.0;
+      const p2Max = p2.length ? 4.0 : 0.0;
+      const s1 = p1.length ? (c1 / p1.length) * p1Max : 0;
+      const s2 = p2.length ? (c2Raw / p2.length) * p2Max : 0;
+      const totalScore = Math.round((s1 + s2) * 100) / 100;
+
+      const slotRadio = document.querySelector('input[name="examSlot"]:checked');
+      const slotVal = slotRadio ? slotRadio.value : "TX1";
+      const slotLabel = slotRadio ? (slotRadio.getAttribute("data-label") || slotVal) : "ĐĐG Thường xuyên 1";
+
+      const payload = {
+        ho_ten: document.getElementById("inpName").value.trim(),
+        lop: document.getElementById("inpClass").value.trim().toUpperCase(),
+        loai_diem: slotVal,
+        ten_loai_diem: slotLabel,
+        diem: totalScore,
+        phan_1_dung: `${c1}/${p1.length}`,
+        phan_2_diem: Math.round(s2 * 100) / 100,
+        thoi_gian_nop: new Date().toLocaleString("vi-VN")
+      };
+
+      const code = document.getElementById("inpCode").value.trim();
+      try {
+        await fetch(`${DB_URL}/results/${encodeURIComponent(code)}.json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } catch (e) {}
+
+      document.getElementById("footerBar").style.display = "none";
+      const resBox = document.getElementById("resultBox");
+      resBox.style.display = "block";
+      resBox.innerHTML = `
+        <h2 style="margin:0 0 8px; color:#6ee7b7;">🎉 ĐÃ NỘP BÀI THÀNH CÔNG!</h2>
+        <div style="font-size:28px; font-weight:bold; color:#fde047;">ĐIỂM SỐ: ${totalScore} / 10</div>
+        <p style="margin:8px 0 0;">Thí sinh: <b>${payload.ho_ten}</b> — Lớp: <b>${payload.lop}</b><br/>
+        Cột điểm đã chọn: <b>${payload.ten_loai_diem} (${payload.loai_diem})</b><br/>
+        Phần I: Đúng <b>${c1}/${p1.length}</b> câu | Phần II: Đạt <b>${payload.phan_2_diem}/${p2Max}</b> điểm</p>
+        <p style="font-size:13px; color:#a7f3d0; margin-bottom:0;">Kéo xuống dưới để xem đáp án và lời giải chi tiết từng câu.</p>
+      `;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise();
+    }
+  </script>
+</body>
+</html>
