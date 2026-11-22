@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hệ Thống Thi Online - TroGiangAI</title>
   <script>
-    window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] } };
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      }
+    };
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <style>
@@ -18,7 +23,8 @@
     .container { max-width: 820px; margin: 16px auto; padding: 0 14px; }
     .box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
     label.field-lbl { display: block; font-weight: bold; font-size: 14px; color: #e2e8f0; margin-top: 10px; }
-    input[type="text"] { width: 100%; padding: 11px 12px; margin-top: 5px; margin-bottom: 6px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 15px; }
+    input[type="text"], input[type="number"] { width: 100%; padding: 11px 12px; margin-top: 5px; margin-bottom: 6px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 15px; }
+    .row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .slot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; margin-bottom: 10px; }
     .slot-item { display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1.5px solid #475569; border-radius: 8px; padding: 10px 10px; cursor: pointer; font-size: 14px; font-weight: 600; }
     .slot-item input { transform: scale(1.2); accent-color: #22c55e; }
@@ -55,13 +61,21 @@
     <div id="loginBox" class="box" style="display:none;">
       <h3 style="margin:0 0 6px; color:#38bdf8;">Thông tin thí sinh & Loại bài kiểm tra</h3>
 
-      <label class="field-lbl">1. Họ và tên học sinh (viết đầy đủ có dấu):</label>
+      <div class="row-2col">
+        <div>
+          <label class="field-lbl" style="color:#fde047;">1. Số thứ tự (STT trong sổ lớp):</label>
+          <input type="number" id="inpStt" min="1" max="70" placeholder="Ví dụ: 15" />
+        </div>
+        <div>
+          <label class="field-lbl">2. Lớp:</label>
+          <input type="text" id="inpClass" placeholder="Ví dụ: 10A12" />
+        </div>
+      </div>
+
+      <label class="field-lbl">3. Họ và tên học sinh (viết đầy đủ có dấu):</label>
       <input type="text" id="inpName" placeholder="Ví dụ: Lê Nguyễn Hà Anh" />
 
-      <label class="field-lbl">2. Lớp:</label>
-      <input type="text" id="inpClass" placeholder="Ví dụ: 10A12" />
-
-      <label class="field-lbl">3. Tích chọn đúng bài kiểm tra (để vào đúng cột điểm):</label>
+      <label class="field-lbl">4. Tích chọn đúng bài kiểm tra (để vào đúng cột điểm):</label>
       <div class="slot-grid">
         <label class="slot-item"><input type="radio" name="examSlot" value="TX1" data-label="ĐĐG Thường xuyên 1" /> Thường xuyên 1 (TX1)</label>
         <label class="slot-item"><input type="radio" name="examSlot" value="TX2" data-label="ĐĐG Thường xuyên 2" /> Thường xuyên 2 (TX2)</label>
@@ -71,7 +85,7 @@
         <label class="slot-item"><input type="radio" name="examSlot" value="CK" data-label="ĐĐG Kiểm tra Học kỳ" /> Kiểm tra Học kỳ</label>
       </div>
 
-      <label class="field-lbl">4. Mã đề (tự động điền khi quét QR):</label>
+      <label class="field-lbl">5. Mã đề (tự động điền khi quét QR):</label>
       <input type="text" id="inpCode" placeholder="Nhập mã đề thầy cung cấp" />
 
       <button class="btn" onclick="startExam()">🚀 Xác Nhận & Bắt Đầu Làm Bài</button>
@@ -88,13 +102,20 @@
   <script>
     const DB_URL = "https://trogiangai-thi-default-rtdb.asia-southeast1.firebasedatabase.app";
     const params = new URLSearchParams(window.location.search);
-    const codeFromUrl = (params.get("de") || "").trim();
+    const codeFromUrl = (params.get("de") || "").trim().toUpperCase();
     document.getElementById("inpCode").value = codeFromUrl;
 
     let examObj = null;
     let timeLeft = 900;
     let timerId = null;
     let submitted = false;
+    let tabLeaveCount = 0;
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && timerId && !submitted) {
+        tabLeaveCount++;
+      }
+    });
 
     function preselectSlot(slotVal) {
       if (!slotVal) return;
@@ -141,26 +162,44 @@
     }
 
     async function startExam() {
+      const sttRaw = document.getElementById("inpStt").value.trim();
+      const sttNum = parseInt(sttRaw, 10);
       const name = document.getElementById("inpName").value.trim();
-      const cls = document.getElementById("inpClass").value.trim().toUpperCase();
-      const code = document.getElementById("inpCode").value.trim();
+      const cls = document.getElementById("inpClass").value.trim().toUpperCase().replace(/\s+/g, "");
+      const code = document.getElementById("inpCode").value.trim().toUpperCase();
+      document.getElementById("inpClass").value = cls;
+      document.getElementById("inpCode").value = code;
       const slotRadio = document.querySelector('input[name="examSlot"]:checked');
 
+      if (!sttRaw || isNaN(sttNum) || sttNum < 1) {
+        alert("Em vui lòng nhập đúng Số thứ tự (STT) của mình trong danh sách lớp!");
+        document.getElementById("inpStt").focus();
+        return;
+      }
       if (!name || !cls || !code) {
-        alert("Em vui lòng nhập đầy đủ Họ tên, Lớp và Mã đề!");
+        alert("Em vui lòng nhập đầy đủ Lớp, Họ tên và Mã đề!");
         return;
       }
       if (!slotRadio) {
         alert("Em vui lòng tích chọn đúng loại bài kiểm tra (TX1, TX2, TX3, TX4, Định kỳ/Giữa kỳ hoặc Học kỳ)!");
         return;
       }
+
+      const lockKey = `tgai_done_${code}_${cls}_${sttNum}`;
+      try {
+        if (localStorage.getItem(lockKey)) {
+          alert(`Thí sinh STT ${sttNum} lớp ${cls} đã nộp bài cho mã đề ${code} trên thiết bị này rồi, không thể làm lại lần 2!`);
+          return;
+        }
+      } catch (e) {}
+
       if (!examObj || examObj.code !== code) {
         const ok = await fetchExam(code);
         if (!ok) return;
       }
 
       const slotLabel = slotRadio.getAttribute("data-label") || slotRadio.value;
-      document.getElementById("studentBanner").innerText = `HS: ${name} | Lớp: ${cls} | Bài: ${slotLabel}`;
+      document.getElementById("studentBanner").innerText = `STT ${sttNum} | ${name} (${cls}) | ${slotLabel}`;
       document.getElementById("loginBox").style.display = "none";
       document.getElementById("examContent").style.display = "block";
       document.getElementById("footerBar").style.display = "flex";
@@ -281,8 +320,15 @@
         expEl.innerHTML = expLines.join("<br/>");
       });
 
-      const p1Max = p2.length ? 6.0 : 10.0;
-      const p2Max = p2.length ? 4.0 : 0.0;
+      let p1Max = 0.0, p2Max = 0.0;
+      if (p1.length > 0 && p2.length > 0) {
+        p1Max = 6.0; p2Max = 4.0;
+      } else if (p1.length > 0) {
+        p1Max = 10.0; p2Max = 0.0;
+      } else if (p2.length > 0) {
+        p1Max = 0.0; p2Max = 10.0;
+      }
+
       const s1 = p1.length ? (c1 / p1.length) * p1Max : 0;
       const s2 = p2.length ? (c2Raw / p2.length) * p2Max : 0;
       const totalScore = Math.round((s1 + s2) * 100) / 100;
@@ -290,36 +336,42 @@
       const slotRadio = document.querySelector('input[name="examSlot"]:checked');
       const slotVal = slotRadio ? slotRadio.value : "TX1";
       const slotLabel = slotRadio ? (slotRadio.getAttribute("data-label") || slotVal) : "ĐĐG Thường xuyên 1";
+      const sttNum = parseInt(document.getElementById("inpStt").value.trim(), 10) || 0;
+      const cls = document.getElementById("inpClass").value.trim().toUpperCase();
+      const code = document.getElementById("inpCode").value.trim().toUpperCase();
 
       const payload = {
+        stt: sttNum,
         ho_ten: document.getElementById("inpName").value.trim(),
-        lop: document.getElementById("inpClass").value.trim().toUpperCase(),
+        lop: cls,
         loai_diem: slotVal,
         ten_loai_diem: slotLabel,
         diem: totalScore,
         phan_1_dung: `${c1}/${p1.length}`,
         phan_2_diem: Math.round(s2 * 100) / 100,
+        roi_man_hinh: tabLeaveCount,
         thoi_gian_nop: new Date().toLocaleString("vi-VN")
       };
 
-      const code = document.getElementById("inpCode").value.trim();
       try {
         await fetch(`${DB_URL}/results/${encodeURIComponent(code)}.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
+        localStorage.setItem(`tgai_done_${code}_${cls}_${sttNum}`, "1");
       } catch (e) {}
 
       document.getElementById("footerBar").style.display = "none";
       const resBox = document.getElementById("resultBox");
       resBox.style.display = "block";
+      const warnTab = tabLeaveCount > 0 ? `<br/><span style="color:#fca5a5;">⚠️ Số lần rời màn hình làm bài: ${tabLeaveCount} lần</span>` : "";
       resBox.innerHTML = `
         <h2 style="margin:0 0 8px; color:#6ee7b7;">🎉 ĐÃ NỘP BÀI THÀNH CÔNG!</h2>
         <div style="font-size:28px; font-weight:bold; color:#fde047;">ĐIỂM SỐ: ${totalScore} / 10</div>
-        <p style="margin:8px 0 0;">Thí sinh: <b>${payload.ho_ten}</b> — Lớp: <b>${payload.lop}</b><br/>
+        <p style="margin:8px 0 0;">STT: <b>${payload.stt}</b> — Thí sinh: <b>${payload.ho_ten}</b> — Lớp: <b>${payload.lop}</b><br/>
         Cột điểm đã chọn: <b>${payload.ten_loai_diem} (${payload.loai_diem})</b><br/>
-        Phần I: Đúng <b>${c1}/${p1.length}</b> câu | Phần II: Đạt <b>${payload.phan_2_diem}/${p2Max}</b> điểm</p>
+        Phần I: Đúng <b>${c1}/${p1.length}</b> câu | Phần II: Đạt <b>${payload.phan_2_diem}/${p2Max}</b> điểm${warnTab}</p>
         <p style="font-size:13px; color:#a7f3d0; margin-bottom:0;">Kéo xuống dưới để xem đáp án và lời giải chi tiết từng câu.</p>
       `;
       window.scrollTo({ top: 0, behavior: "smooth" });
